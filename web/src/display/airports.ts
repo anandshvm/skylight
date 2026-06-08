@@ -1,5 +1,5 @@
 // Bundled airport geometry, drawn at true geographic position so departures and
-// arrivals visibly line up with the runways. Coordinates from OurAirports (KSFO).
+// arrivals visibly line up with the runways. Coordinates from OurAirports.
 
 export interface Runway {
   leIdent: string;
@@ -26,5 +26,14 @@ export const SFO: Airport = {
   ],
 };
 
-/** Airports drawn on the map (currently just SFO; easy to extend). */
-export const AIRPORTS: Airport[] = [SFO];
+export const BLR: Airport = {
+  icao: "VOBL",
+  name: "BLR",
+  runways: [
+    { leIdent: "09L", heIdent: "27R", le: [13.207164, 77.686073], he: [13.206847, 77.722969], widthFt: 148 },
+    { leIdent: "09R", heIdent: "27L", le: [13.189734, 77.68998], he: [13.189414, 77.726875], widthFt: 148 },
+  ],
+};
+
+/** Airports drawn on the map. */
+export const AIRPORTS: Airport[] = [BLR];

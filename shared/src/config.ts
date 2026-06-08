@@ -6,6 +6,7 @@
 export type Theme = "ambient" | "telemetry" | "focus";
 export type LabelDensity = "all" | "nearestN" | "nearestOnly";
 export type DataSource = "radio" | "api";
+export type Units = "imperial" | "metric";
 
 export interface Palette {
   bg: string;
@@ -40,6 +41,9 @@ export interface Config {
   centerLat: number;
   centerLon: number;
   radiusMiles: number;
+
+  // --- units ---
+  units: Units; // imperial (miles, feet) or metric (km, meters)
 
   // --- calibration (tune against a real overhead pass) ---
   /** Rotate the whole field, degrees. */
@@ -92,6 +96,8 @@ export interface Config {
   showAirport: boolean;
   /** Show the on-screen calibration HUD on the display. */
   showHud: boolean;
+  /** Show a marker at the center location (your position). */
+  showCenterMarker: boolean;
 
   // --- sky layer (sun / moon / stars / satellites at true positions) ---
   showStars: boolean;
@@ -111,24 +117,27 @@ export interface Config {
 }
 
 export const DEFAULT_CONFIG: Config = {
-  // Default center: San Francisco International (SFO). Set this to your own
-  // location — ideally where you'll be looking up at the ceiling.
-  centerLat: 37.6213,
-  centerLon: -122.379,
-  radiusMiles: 3,
+  // Default center: Your location in Bengaluru, India.
+  // Set this to your own location — ideally where you'll be looking up at the ceiling.
+  centerLat: 12.971589,
+  centerLon: 77.735984,
+  // Internal storage is always miles; 49.7 mi ≈ 80 km.
+  radiusMiles: 49.7,
+
+  units: "metric",
 
   rotationDeg: 0,
   mirrorX: true,
   mirrorY: false,
   labelRotationDeg: 0,
 
-  minAltitudeFt: 100,
+  minAltitudeFt: 0,
   maxAltitudeFt: 60000,
-  hideOnGround: true,
+  hideOnGround: false,
 
   interpolate: true,
-  maxExtrapolationSec: 5,
-  staleSec: 20,
+  maxExtrapolationSec: 15,
+  staleSec: 60,
   smoothing: 0.18,
   maxFps: 0,
 
@@ -169,6 +178,7 @@ export const DEFAULT_CONFIG: Config = {
   highlightEmergency: true,
   showAirport: true,
   showHud: false,
+  showCenterMarker: true,
 
   showStars: true,
   showSun: true,
@@ -193,4 +203,30 @@ export function mergeConfig(base: Config, patch: Partial<Config>): Config {
     fonts: { ...base.fonts, ...(patch.fonts ?? {}) },
     showFields: { ...base.showFields, ...(patch.showFields ?? {}) },
   };
+}
+
+// Unit conversion helpers
+export const MI_TO_KM = 1.60934;
+export const FT_TO_M = 0.3048;
+export const KT_TO_KMH = 1.852;
+
+export function formatDistance(miles: number, units: Units): string {
+  if (units === "metric") {
+    return `${(miles * MI_TO_KM).toFixed(1)} km`;
+  }
+  return `${miles.toFixed(1)} mi`;
+}
+
+export function formatAltitude(feet: number, units: Units): string {
+  if (units === "metric") {
+    return `${Math.round(feet * FT_TO_M)} m`;
+  }
+  return `${Math.round(feet)} ft`;
+}
+
+export function formatSpeed(knots: number, units: Units): string {
+  if (units === "metric") {
+    return `${Math.round(knots * KT_TO_KMH)} km/h`;
+  }
+  return `${Math.round(knots)} kts`;
 }

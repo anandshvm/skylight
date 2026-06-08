@@ -18,6 +18,7 @@ import {
   rangeMeters,
   metersToMiles,
   EMERGENCY_SQUAWKS,
+  MI_TO_KM,
   type Aircraft,
   type Config,
   type Meters,
@@ -369,11 +370,47 @@ export class Renderer {
         ctx.stroke();
       }
       ctx.setLineDash([]);
-      // Center mark.
+      ctx.restore();
+    }
+
+    // Center marker - your location
+    if (cfg.showCenterMarker) {
+      ctx.save();
+      const markerColor = hexToRgb(cfg.palette.accent);
+
+      // Outer pulsing ring
+      const pulsePhase = (this.frameT * 1.5) % 2;
+      const pulseAlpha = pulsePhase < 1 ? 0.6 - pulsePhase * 0.4 : 0.2;
+      const pulseRadius = 8 + pulsePhase * 6;
+      ctx.beginPath();
+      ctx.arc(cx, cy, pulseRadius, 0, Math.PI * 2);
+      ctx.strokeStyle = rgba(markerColor, pulseAlpha * cfg.brightness);
+      ctx.lineWidth = 2;
+      ctx.stroke();
+
+      // Inner solid circle
+      ctx.beginPath();
+      ctx.arc(cx, cy, 5, 0, Math.PI * 2);
+      ctx.fillStyle = rgba(markerColor, 0.9 * cfg.brightness);
+      ctx.fill();
+
+      // Inner dot
       ctx.beginPath();
       ctx.arc(cx, cy, 2, 0, Math.PI * 2);
-      ctx.fillStyle = rgba(hexToRgb(cfg.palette.grid), 0.7 * cfg.brightness);
+      ctx.fillStyle = rgba([255, 255, 255], 0.95 * cfg.brightness);
       ctx.fill();
+
+      // Crosshairs
+      const crossLen = 12;
+      ctx.strokeStyle = rgba(markerColor, 0.7 * cfg.brightness);
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(cx - crossLen, cy);
+      ctx.lineTo(cx + crossLen, cy);
+      ctx.moveTo(cx, cy - crossLen);
+      ctx.lineTo(cx, cy + crossLen);
+      ctx.stroke();
+
       ctx.restore();
     }
 
@@ -803,9 +840,25 @@ export class Renderer {
     const alt = ac.altBaro ?? ac.altGeom;
     if (f.altitude) {
       if (ac.onGround) sub.push("GND");
-      else if (alt != null) sub.push(`${alt.toLocaleString("en-US")} ft`);
+      else if (alt != null) {
+        // Show altitude in correct units
+        if (cfg.units === "metric") {
+          const altM = Math.round(alt * 0.3048);
+          sub.push(`${altM.toLocaleString("en-US")} m`);
+        } else {
+          sub.push(`${alt.toLocaleString("en-US")} ft`);
+        }
+      }
     }
-    if (f.speed && ac.gs != null) sub.push(`${Math.round(ac.gs)} kt`);
+    if (f.speed && ac.gs != null) {
+      // Show speed in correct units
+      if (cfg.units === "metric") {
+        const kmh = Math.round(ac.gs * 1.852);
+        sub.push(`${kmh} km/h`);
+      } else {
+        sub.push(`${Math.round(ac.gs)} kt`);
+      }
+    }
     if (sub.length) out.push({ text: sub.join("   "), kind: "sub" });
 
     if (f.destination && ac.destination && routePlausible(ac, cfg)) {
@@ -815,7 +868,15 @@ export class Renderer {
         const bits: string[] = [`${localTimeAt(ac.destLon)} local`];
         if (ac.lat != null && ac.lon != null) {
           const mi = Math.round(greatCircleMiles(ac.lat, ac.lon, ac.destLat, ac.destLon));
-          if (mi > 1) bits.push(`${mi.toLocaleString("en-US")} mi to go`);
+          if (mi > 1) {
+            // Show distance in correct units
+            if (cfg.units === "metric") {
+              const km = Math.round(mi * MI_TO_KM);
+              bits.push(`${km.toLocaleString("en-US")} km to go`);
+            } else {
+              bits.push(`${mi.toLocaleString("en-US")} mi to go`);
+            }
+          }
         }
         out.push({ text: bits.join("   ·   "), kind: "sub" });
       }

@@ -1,8 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import type { Config, ShowFields } from "@shared/index.js";
+import { MI_TO_KM } from "@shared/index.js";
 import { useStream } from "../lib/useStream.js";
 import { nextISSPass, type Tle } from "../display/celestial.js";
 import { ColorRow, Row, Section, Segmented, Slider, Toggle } from "./components.js";
+
+const KM_TO_MI = 1 / MI_TO_KM;
 
 function skyTimeLabel(offsetMin: number): string {
   if (offsetMin === 0) return "live";
@@ -31,6 +34,11 @@ export function Control() {
   const { state, conn } = useStream("control");
   const cfg = state.config;
 
+  // Location fetching state
+  const [fetchingLocation, setFetchingLocation] = useState(false);
+  const [locationError, setLocationError] = useState<string | null>(null);
+  const [locationName, setLocationName] = useState<string | null>(null);
+
   // ISS pass finder (for the Sky section).
   const [tles, setTles] = useState<Tle[]>([]);
   useEffect(() => {
@@ -43,6 +51,72 @@ export function Control() {
       on = false;
     };
   }, []);
+
+  // Auto-fetch location on first load if not already set to a custom location
+  useEffect(() => {
+    if (cfg && cfg.centerLat === 12.971589 && cfg.centerLon === 77.735984) {
+      // Only auto-fetch if we're still at the default location
+      // Uncomment the line below to enable auto-fetch on load
+      // fetchCurrentLocation();
+    }
+  }, [cfg?.centerLat, cfg?.centerLon]);
+
+  const fetchCurrentLocation = () => {
+    if (!navigator.geolocation) {
+      setLocationError("Geolocation is not supported by your browser");
+      return;
+    }
+
+    setFetchingLocation(true);
+    setLocationError(null);
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const { latitude, longitude } = position.coords;
+        conn.patchConfig({
+          centerLat: latitude,
+          centerLon: longitude,
+        });
+        setFetchingLocation(false);
+
+        // Try to fetch location name
+        fetch(`https://nominatim.openstreetmap.org/reverse?lat=${latitude}&lon=${longitude}&format=json`)
+          .then(r => r.json())
+          .then(data => {
+            const city = data.address?.city || data.address?.town || data.address?.village || '';
+            const state = data.address?.state || '';
+            const country = data.address?.country || '';
+            const name = [city, state, country].filter(Boolean).join(', ');
+            if (name) setLocationName(name);
+          })
+          .catch(() => {
+            setLocationName(`${latitude.toFixed(4)}°, ${longitude.toFixed(4)}°`);
+          });
+      },
+      (error) => {
+        let message = "Failed to get location";
+        switch (error.code) {
+          case error.PERMISSION_DENIED:
+            message = "Location permission denied. Please enable location access.";
+            break;
+          case error.POSITION_UNAVAILABLE:
+            message = "Location information unavailable";
+            break;
+          case error.TIMEOUT:
+            message = "Location request timed out";
+            break;
+        }
+        setLocationError(message);
+        setFetchingLocation(false);
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 10000,
+        maximumAge: 0,
+      }
+    );
+  };
+
   const nextPass = useMemo(
     () => (tles.length && cfg ? nextISSPass(Date.now(), cfg.centerLat, cfg.centerLon, tles) : null),
     [tles, cfg?.centerLat, cfg?.centerLon],
@@ -66,15 +140,163 @@ export function Control() {
       <header className="topbar">
         <div className="brand">
           <span className={`dot ${state.connected ? "ok" : "bad"}`} />
-          Ceiling Tracker
+          Skylight Control
         </div>
         <div className="stat">
-          {state.status?.source ?? "—"} · {state.aircraft.length} overhead
+          {state.status?.source ?? "—"} · {state.aircraft.length} aircraft
         </div>
       </header>
 
       <main>
+        {state.aircraft.length === 0 && state.connected && (
+          <div style={{
+            background: 'rgba(155, 126, 207, 0.1)',
+            border: '1px solid rgba(155, 126, 207, 0.3)',
+            borderRadius: '12px',
+            padding: '14px 16px',
+            marginTop: '16px',
+            fontSize: '14px',
+            color: '#9b7ecf',
+            textAlign: 'center'
+          }}>
+            📡 Waiting for aircraft... Check your location and radius settings below.
+          </div>
+        )}
+
+        {locationError && (
+          <div style={{
+            background: 'rgba(224, 83, 61, 0.1)',
+            border: '1px solid rgba(224, 83, 61, 0.3)',
+            borderRadius: '12px',
+            padding: '14px 16px',
+            marginTop: '16px',
+            fontSize: '13px',
+            color: '#e0533d',
+            textAlign: 'center'
+          }}>
+            ⚠️ {locationError}
+          </div>
+        )}
+
+        {locationName && (
+          <div style={{
+            background: 'rgba(74, 222, 128, 0.1)',
+            border: '1px solid rgba(74, 222, 128, 0.3)',
+            borderRadius: '12px',
+            padding: '14px 16px',
+            marginTop: '16px',
+            fontSize: '13px',
+            color: '#4ade80',
+            textAlign: 'center',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '8px'
+          }}>
+            <span>✅ Location set to: <strong>{locationName}</strong></span>
+          </div>
+        )}
+
         <Section title="Calibration">
+          <div style={{
+            padding: '14px 16px',
+            borderBottom: '1px solid var(--line)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '12px'
+          }}>
+            <button
+              onClick={fetchCurrentLocation}
+              disabled={fetchingLocation}
+              style={{
+                flex: 1,
+                padding: '12px 16px',
+                background: fetchingLocation ? 'var(--panel-2)' : 'var(--accent)',
+                color: '#fff',
+                border: 'none',
+                borderRadius: '10px',
+                fontSize: '14px',
+                fontWeight: '600',
+                cursor: fetchingLocation ? 'not-allowed' : 'pointer',
+                transition: 'all 0.2s',
+                boxShadow: fetchingLocation ? 'none' : '0 2px 8px rgba(155, 126, 207, 0.3)',
+              }}
+              onMouseEnter={(e) => {
+                if (!fetchingLocation) {
+                  e.currentTarget.style.background = 'var(--accent-hover)';
+                  e.currentTarget.style.transform = 'translateY(-1px)';
+                }
+              }}
+              onMouseLeave={(e) => {
+                if (!fetchingLocation) {
+                  e.currentTarget.style.background = 'var(--accent)';
+                  e.currentTarget.style.transform = 'translateY(0)';
+                }
+              }}
+            >
+              {fetchingLocation ? '📍 Fetching Location...' : '📍 Use My Current Location'}
+            </button>
+          </div>
+          <Row label="Units" hint="distance and altitude display">
+            <Segmented value={cfg.units}
+              options={[
+                { value: "imperial", label: "Imperial (mi/ft)" },
+                { value: "metric", label: "Metric (km/m)" },
+              ]}
+              onChange={(v) => set({ units: v })} />
+          </Row>
+          <Row label="Center Latitude" hint="north-south position (your location)">
+            <Slider value={cfg.centerLat} min={-90} max={90} step={0.0001} unit="°"
+              onChange={(v) => set({ centerLat: v })} />
+          </Row>
+          <Row label="Center Longitude" hint="east-west position (your location)">
+            <Slider value={cfg.centerLon} min={-180} max={180} step={0.0001} unit="°"
+              onChange={(v) => set({ centerLon: v })} />
+          </Row>
+          <div style={{
+            padding: '10px 16px',
+            borderTop: '1px solid var(--line)',
+            fontSize: '12px',
+            color: 'var(--muted)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px'
+          }}>
+            💡 Tip: Use the button above to auto-detect your location, or manually adjust the coordinates.
+          </div>
+          <Row label="Radius" hint="how far to show aircraft">
+            {cfg.units === "metric" ? (
+              <Slider
+                value={Math.round(cfg.radiusMiles * MI_TO_KM)}
+                min={1} max={400} step={5} unit="km"
+                onChange={(v) => set({ radiusMiles: Math.round(v * KM_TO_MI * 10) / 10 })}
+              />
+            ) : (
+              <Slider
+                value={cfg.radiusMiles}
+                min={0.5} max={250} step={0.5} unit="mi"
+                onChange={(v) => set({ radiusMiles: v })}
+              />
+            )}
+          </Row>
+          <div className="chips">
+            {(cfg.units === "metric"
+              ? [10, 25, 50, 80, 150]
+              : [5, 15, 30, 50, 100]
+            ).map(val => {
+              const storedMi = cfg.units === "metric" ? Math.round(val * KM_TO_MI * 10) / 10 : val;
+              const active = Math.abs(cfg.radiusMiles - storedMi) < 1;
+              return (
+                <button
+                  key={val}
+                  className={`chip ${active ? "on" : ""}`}
+                  onClick={() => set({ radiusMiles: storedMi })}
+                >
+                  {val} {cfg.units === "metric" ? "km" : "mi"}
+                </button>
+              );
+            })}
+          </div>
           <Row label="Rotation" hint="align field to ceiling">
             <Slider value={cfg.rotationDeg} min={0} max={355} step={5} unit="°"
               onChange={(v) => set({ rotationDeg: v })} />
@@ -88,10 +310,6 @@ export function Control() {
           <Row label="Label rotation" hint="text only, not the map">
             <Slider value={cfg.labelRotationDeg} min={0} max={355} step={5} unit="°"
               onChange={(v) => set({ labelRotationDeg: v })} />
-          </Row>
-          <Row label="Radius">
-            <Slider value={cfg.radiusMiles} min={0.5} max={10} step={0.5} unit="mi"
-              onChange={(v) => set({ radiusMiles: v })} />
           </Row>
         </Section>
 
@@ -151,11 +369,13 @@ export function Control() {
 
         <Section title="Filters">
           <Row label="Min altitude" hint="hide ground/taxi">
-            <Slider value={cfg.minAltitudeFt} min={0} max={10000} step={100} unit="ft"
+            <Slider value={cfg.minAltitudeFt} min={0} max={10000} step={100}
+              unit={cfg.units === "metric" ? "m" : "ft"}
               onChange={(v) => set({ minAltitudeFt: v })} />
           </Row>
           <Row label="Max altitude">
-            <Slider value={cfg.maxAltitudeFt} min={1000} max={60000} step={1000} unit="ft"
+            <Slider value={cfg.maxAltitudeFt} min={1000} max={60000} step={1000}
+              unit={cfg.units === "metric" ? "m" : "ft"}
               onChange={(v) => set({ maxAltitudeFt: v })} />
           </Row>
           <Row label="Hide aircraft on ground">
@@ -164,21 +384,58 @@ export function Control() {
         </Section>
 
         <Section title="Motion">
-          <Row label="Interpolate">
+          <Row label="Interpolate" hint="smooth movement between updates">
             <Toggle value={cfg.interpolate} onChange={(v) => set({ interpolate: v })} />
           </Row>
-          <Row label="Smoothing" hint="0 snap · 1 slow">
+          <Row label="Smoothing" hint="0 = instant, higher = slower response">
             <Slider value={cfg.smoothing} min={0} max={0.9} step={0.02}
               onChange={(v) => set({ smoothing: v })} />
           </Row>
-          <Row label="Max extrapolation">
-            <Slider value={cfg.maxExtrapolationSec} min={0} max={15} step={1} unit="s"
+          <Row label="Max extrapolation" hint="keep showing after last update (seconds)">
+            <Slider value={cfg.maxExtrapolationSec} min={0} max={30} step={1} unit="s"
               onChange={(v) => set({ maxExtrapolationSec: v })} />
           </Row>
-          <Row label="Drop after">
-            <Slider value={cfg.staleSec} min={5} max={60} step={1} unit="s"
+          <Row label="Drop after" hint="remove aircraft after this many seconds">
+            <Slider value={cfg.staleSec} min={5} max={120} step={5} unit="s"
               onChange={(v) => set({ staleSec: v })} />
           </Row>
+          <div className="chips">
+            <button
+              className={`chip ${cfg.staleSec === 30 ? 'on' : ''}`}
+              onClick={() => set({ staleSec: 30 })}
+            >
+              30s (Quick)
+            </button>
+            <button
+              className={`chip ${cfg.staleSec === 60 ? 'on' : ''}`}
+              onClick={() => set({ staleSec: 60 })}
+            >
+              60s (Balanced)
+            </button>
+            <button
+              className={`chip ${cfg.staleSec === 90 ? 'on' : ''}`}
+              onClick={() => set({ staleSec: 90 })}
+            >
+              90s (Persistent)
+            </button>
+            <button
+              className={`chip ${cfg.staleSec === 120 ? 'on' : ''}`}
+              onClick={() => set({ staleSec: 120 })}
+            >
+              120s (Very Persistent)
+            </button>
+          </div>
+          <div style={{
+            padding: '10px 16px',
+            borderTop: '1px solid var(--line)',
+            fontSize: '12px',
+            color: 'var(--muted)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px'
+          }}>
+            💡 Tip: Increase "Drop after" to keep aircraft visible longer between updates.
+          </div>
           <Row label="Max FPS" hint="0 = uncapped">
             <Slider value={cfg.maxFps} min={0} max={120} step={5} unit="fps"
               onChange={(v) => set({ maxFps: v })} />
@@ -191,6 +448,9 @@ export function Control() {
           </Row>
           <Row label="Compass">
             <Toggle value={cfg.compass} onChange={(v) => set({ compass: v })} />
+          </Row>
+          <Row label="Center marker" hint="your location">
+            <Toggle value={cfg.showCenterMarker} onChange={(v) => set({ showCenterMarker: v })} />
           </Row>
           <Row label="Airport runways">
             <Toggle value={cfg.showAirport} onChange={(v) => set({ showAirport: v })} />
