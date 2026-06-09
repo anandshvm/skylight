@@ -91,9 +91,53 @@ export function Display() {
     conn.patchConfig({ radiusMiles: newRadius });
   };
 
+  const toggleFullscreen = () => {
+    if (!document.fullscreenElement) {
+      document.documentElement.requestFullscreen();
+    } else {
+      document.exitFullscreen();
+    }
+  };
+
   return (
     <div className="display-root">
       <canvas ref={canvasRef} className="display-canvas" />
+
+      {/* Settings Button - Top Right */}
+      <div style={{
+        position: 'fixed',
+        top: '20px',
+        right: '20px',
+        zIndex: 100,
+      }}>
+        <button
+          onClick={() => window.open('/control.html', '_blank')}
+          style={{
+            width: '48px',
+            height: '48px',
+            borderRadius: '50%',
+            border: '1px solid rgba(155, 126, 207, 0.3)',
+            background: 'rgba(14, 16, 22, 0.9)',
+            backdropFilter: 'blur(12px)',
+            color: '#9b7ecf',
+            fontSize: '20px',
+            cursor: 'pointer',
+            boxShadow: '0 4px 12px rgba(0, 0, 0, 0.5)',
+            transition: 'all 0.2s',
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.background = 'rgba(155, 126, 207, 0.2)';
+            e.currentTarget.style.transform = 'scale(1.1)';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.background = 'rgba(14, 16, 22, 0.9)';
+            e.currentTarget.style.transform = 'scale(1)';
+          }}
+          title="Open control panel"
+        >
+          ⚙️
+        </button>
+      </div>
 
       {/* Zoom Controls */}
       <div style={{
@@ -175,6 +219,33 @@ export function Display() {
           title="Zoom in (decrease radius)"
         >
           −
+        </button>
+        <button
+          onClick={toggleFullscreen}
+          style={{
+            width: '48px',
+            height: '48px',
+            borderRadius: '50%',
+            border: '1px solid rgba(155, 126, 207, 0.3)',
+            background: 'rgba(14, 16, 22, 0.9)',
+            backdropFilter: 'blur(12px)',
+            color: '#9b7ecf',
+            fontSize: '20px',
+            cursor: 'pointer',
+            boxShadow: '0 4px 12px rgba(0, 0, 0, 0.5)',
+            transition: 'all 0.2s',
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.background = 'rgba(155, 126, 207, 0.2)';
+            e.currentTarget.style.transform = 'scale(1.1)';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.background = 'rgba(14, 16, 22, 0.9)';
+            e.currentTarget.style.transform = 'scale(1)';
+          }}
+          title="Toggle fullscreen"
+        >
+          ⛶
         </button>
       </div>
 
