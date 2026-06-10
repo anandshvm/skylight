@@ -99,6 +99,28 @@ export function Display() {
     }
   };
 
+  const goToCurrentLocation = () => {
+    if (!navigator.geolocation) {
+      alert('Geolocation is not supported by your browser');
+      return;
+    }
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const lat = position.coords.latitude;
+        const lon = position.coords.longitude;
+        conn.patchConfig({
+          centerLat: lat,
+          centerLon: lon
+        });
+      },
+      (error) => {
+        console.error('Error getting location:', error);
+        alert('Unable to get your location. Please enable location permissions.');
+      }
+    );
+  };
+
   return (
     <div className="display-root">
       <canvas ref={canvasRef} className="display-canvas" />
@@ -139,7 +161,7 @@ export function Display() {
         </button>
       </div>
 
-      {/* Zoom Controls */}
+      {/* Zoom Controls + Location Button */}
       <div style={{
         position: 'fixed',
         bottom: '20px',
@@ -149,6 +171,38 @@ export function Display() {
         gap: '8px',
         zIndex: 100,
       }}>
+        <button
+          onClick={goToCurrentLocation}
+          style={{
+            width: '48px',
+            height: '48px',
+            borderRadius: '50%',
+            border: '1px solid rgba(155, 126, 207, 0.3)',
+            background: 'rgba(14, 16, 22, 0.9)',
+            backdropFilter: 'blur(12px)',
+            color: '#9b7ecf',
+            fontSize: '24px',
+            cursor: 'pointer',
+            boxShadow: '0 4px 12px rgba(0, 0, 0, 0.5)',
+            transition: 'all 0.2s',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.background = 'rgba(155, 126, 207, 0.2)';
+            e.currentTarget.style.transform = 'scale(1.1)';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.background = 'rgba(14, 16, 22, 0.9)';
+            e.currentTarget.style.transform = 'scale(1)';
+          }}
+          title="Go to my current location"
+        >
+          <svg width="20" height="20" viewBox="0 0 512 512" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+            <path d="M444.52 3.52L28.74 195.42c-47.97 22.39-31.98 92.75 19.19 92.75h175.91v175.91c0 51.17 70.36 67.17 92.75 19.19l191.9-415.78c15.99-38.39-25.59-79.97-63.97-63.97z"/>
+          </svg>
+        </button>
         <button
           onClick={increaseRadius}
           style={{
