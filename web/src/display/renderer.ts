@@ -310,7 +310,13 @@ export class Renderer {
     const byNear = [...visible].reverse(); // nearest first
     this.drawLabels(cfg, byNear);
 
-    if (cfg.theme === "focus" && byNear.length) this.drawDetailPanel(cfg, byNear[0]);
+    if (cfg.theme === "focus" && byNear.length) {
+      // Show up to 2 closest aircraft in focus mode
+      const numToShow = Math.min(2, byNear.length);
+      for (let i = 0; i < numToShow; i++) {
+        this.drawDetailPanel(cfg, byNear[i], i, numToShow);
+      }
+    }
   }
 
   /**
@@ -862,8 +868,15 @@ export class Renderer {
     if (sub.length) out.push({ text: sub.join("   "), kind: "sub" });
 
     if (f.destination && ac.destination && routePlausible(ac, cfg)) {
-      const head = ac.origin ? `${ac.origin} → ${ac.destination}` : `→ ${ac.destination}`;
-      out.push({ text: ac.destName ? `${head}   ${ac.destName}` : head, kind: "sub" });
+      // Show city name with airport code in brackets: "Ranchi (IXR)"
+      const originDisplay = ac.originName
+        ? `${ac.originName}${ac.origin ? ` (${ac.origin})` : ''}`
+        : ac.origin;
+      const destDisplay = ac.destName
+        ? `${ac.destName}${ac.destination ? ` (${ac.destination})` : ''}`
+        : ac.destination;
+      const head = originDisplay ? `${originDisplay} → ${destDisplay}` : `→ ${destDisplay}`;
+      out.push({ text: head, kind: "sub" });
       if (cfg.showRouteDetail && ac.destLat != null && ac.destLon != null) {
         const bits: string[] = [`${localTimeAt(ac.destLon)} local`];
         if (ac.lat != null && ac.lon != null) {
@@ -972,10 +985,13 @@ export class Renderer {
     });
   }
 
-  private drawDetailPanel(cfg: Config, v: Visible): void {
+  private drawDetailPanel(cfg: Config, v: Visible, index: number, total: number): void {
     const ac = v.tr.ac;
     const x = 40;
-    const y = this.h - 120;
+    // Position panels vertically based on index
+    const panelHeight = 100;
+    const gap = 20;
+    const y = this.h - (total - index) * (panelHeight + gap) - 20;
     this.withLabelRotation(cfg, x, y, () => this.drawDetailPanelText(cfg, v, ac, x, y));
   }
 
@@ -1002,12 +1018,58 @@ export class Renderer {
     ctx.font = `400 15px ${cfg.fonts.label}`;
     ctx.fillStyle = rgba(hexToRgb(cfg.palette.text), 0.85 * v.alpha);
     const dpAlt = ac.altBaro ?? ac.altGeom;
+
+    // Format altitude and speed based on units
+    let altText = null;
+    if (ac.onGround) {
+      altText = "on ground";
+    } else if (dpAlt != null) {
+      if (cfg.units === "metric") {
+        const altM = Math.round(dpAlt * 0.3048);
+        altText = `${altM.toLocaleString("en-US")} m`;
+      } else {
+        altText = `${dpAlt.toLocaleString("en-US")} ft`;
+      }
+    }
+
+    let speedText = null;
+    if (ac.gs != null) {
+      if (cfg.units === "metric") {
+        const kmh = Math.round(ac.gs * 1.852);
+        speedText = `${kmh} km/h`;
+      } else {
+        speedText = `${Math.round(ac.gs)} kt`;
+      }
+    }
+
+    // Add distance from your location
+    let distText = null;
+    if (cfg.units === "metric") {
+      const distKm = (v.rangeMi * MI_TO_KM).toFixed(1);
+      distText = `${distKm} km away`;
+    } else {
+      distText = `${v.rangeMi.toFixed(1)} mi away`;
+    }
+
+    // Format route with city names and airport codes
+    let routeText = null;
+    if (ac.origin && ac.destination && routePlausible(ac, cfg)) {
+      const originDisplay = ac.originName
+        ? `${ac.originName}${ac.origin ? ` (${ac.origin})` : ''}`
+        : ac.origin;
+      const destDisplay = ac.destName
+        ? `${ac.destName}${ac.destination ? ` (${ac.destination})` : ''}`
+        : ac.destination;
+      routeText = `${originDisplay} → ${destDisplay}`;
+    }
+
     const bits = [
       ac.airline,
       ac.typeName ?? ac.typeCode,
-      ac.onGround ? "on ground" : dpAlt != null ? `${dpAlt.toLocaleString("en-US")} ft` : null,
-      ac.gs != null ? `${Math.round(ac.gs)} kt` : null,
-      ac.origin && ac.destination && routePlausible(ac, cfg) ? `${ac.origin} → ${ac.destination}` : null,
+      altText,
+      speedText,
+      distText,
+      routeText,
     ].filter(Boolean);
     ctx.fillText(bits.join("    ·    "), x, y + 26);
     try {
